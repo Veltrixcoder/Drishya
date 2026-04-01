@@ -16,7 +16,7 @@ class HlstrServerResolver {
       'Priority': 'u=1, i',
     });
     if (resp.statusCode != 200) {
-      throw Exception('HLSTR failed with ' + resp.statusCode.toString());
+      throw Exception('HLSTR failed with ${resp.statusCode}');
     }
     final data = json.decode(resp.body) as Map<String, dynamic>;
     final hlsUrl = (data['hlsUrl'] ?? '').toString();

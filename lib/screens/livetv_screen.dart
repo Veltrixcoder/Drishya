@@ -5,10 +5,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import '../models/channel.dart';
-import '../services/iptv_service.dart';
+import '../models/api_models.dart';
+import '../services/api_service.dart';
 import 'live_player_screen.dart';
 import '../widgets/m3_loading.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/native_ad_widget.dart';
+import '../widgets/banner_ad_widget.dart';
 
 // ── Design tokens (shared across app) ────────────────────────────────────────
 
@@ -45,7 +48,7 @@ class LiveTvScreen extends StatefulWidget {
 }
 
 class _LiveTvScreenState extends State<LiveTvScreen> {
-  final _service = IptvService();
+  final _api = ApiService.instance;
 
   List<CountryEntry> _countries = [];
   List<RegionEntry> _regions = [];
@@ -90,10 +93,10 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
   Future<void> _loadInitialData() async {
     setState(() => _loadingInitial = true);
     final results = await Future.wait([
-      _service.fetchCountries(),
-      _service.fetchRegions(),
-      _service.fetchCategories(),
-      _service.fetchLanguages(),
+      _api.fetchCountries(),
+      _api.fetchRegions(),
+      _api.fetchCategories(),
+      _api.fetchLanguages(),
     ]);
     if (mounted) {
       setState(() {
@@ -193,7 +196,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
       if (_browseBy == BrowsingType.country && _selectedItem is CountryEntry) {
         country = _selectedItem.code;
       }
-      response = await _service.searchChannels(
+      response = await _api.searchChannels(
         _subFilterCategory!.name,
         category: _subFilterCategory!.id,
         country: country,
@@ -202,23 +205,23 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
     } else {
       switch (_browseBy) {
         case BrowsingType.country:
-          response = await _service.fetchChannelsByCountry(
+          response = await _api.fetchChannelsByCountry(
               (_selectedItem as CountryEntry).code,
               page: page);
           break;
         case BrowsingType.region:
-          response = await _service.fetchChannelsByRegion(
+          response = await _api.fetchChannelsByRegion(
               (_selectedItem as RegionEntry).code,
               page: page);
           break;
         case BrowsingType.category:
-          response = await _service.searchChannels(
+          response = await _api.searchChannels(
               (_selectedItem as CategoryEntry).name,
               category: (_selectedItem as CategoryEntry).id,
               page: page);
           break;
         case BrowsingType.language:
-          response = await _service.searchChannels(
+          response = await _api.searchChannels(
               (_selectedItem as LanguageEntry).name,
               page: page);
           break;
@@ -247,7 +250,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
     setState(() => _loadingMore = true);
     _currentPage++;
     if (_isSearching) {
-      final response = await _service.searchChannels(_searchCtrl.text,
+      final response = await _api.searchChannels(_searchCtrl.text,
           page: _currentPage);
       if (mounted) {
         setState(() {
@@ -292,7 +295,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
       _isSearching = true;
       _currentPage = 1;
     });
-    final response = await _service.searchChannels(q, page: _currentPage);
+    final response = await _api.searchChannels(q, page: _currentPage);
     if (mounted) {
       setState(() {
         _filtered = response.results;
@@ -335,16 +338,22 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: CustomScrollView(
-        controller: _scrollController,
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          _buildAppBar(cs),
-          if (_selectedItem == null)
-            ..._buildBrowserView(cs)
-          else
-            ..._buildChannelView(cs),
-        ],
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              _buildAppBar(cs),
+              if (_selectedItem == null)
+                ..._buildBrowserView(cs)
+              else
+                ..._buildChannelView(cs),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -377,10 +386,10 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    color: cs.onSurface.withOpacity(0.06),
+                    color: cs.onSurface.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: cs.onSurface.withOpacity(0.08), width: 0.5),
+                        color: cs.onSurface.withValues(alpha: 0.08), width: 0.5),
                   ),
                   child: Icon(CupertinoIcons.chevron_back,
                       color: cs.onSurface, size: 16),
@@ -401,16 +410,16 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                     TextSpan(
                       text: 'Live ',
                       style: GoogleFonts.dmSerifDisplay(
-                          fontSize: 26, color: cs.onSurface),
+                          fontSize: 28, color: cs.onSurface, letterSpacing: -0.5),
                     ),
                     TextSpan(
                       text: 'TV',
                       style: GoogleFonts.dmSerifDisplay(
-                          fontSize: 26, color: _accent),
+                          fontSize: 28, color: _accent, letterSpacing: -0.5),
                     ),
                   ]),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 _LiveDot(),
               ],
             ),
@@ -447,6 +456,8 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         child: Column(
           children: [
             _buildHeroBanner(cs),
+            const NativeAdWidget(size: NativeAdSize.small),
+            BannerAdWidget(),
             _buildModeSelector(cs),
           ],
         ),
@@ -466,19 +477,33 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Container(
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: cs.onSurface.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(_kRadiusLg),
-          border: Border.all(
-              color: cs.onSurface.withOpacity(0.07), width: 0.5),
-        ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                cs.surfaceContainerHigh.withValues(alpha: 0.8),
+                cs.surfaceContainer.withValues(alpha: 0.4),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(_kRadiusLg),
+            border: Border.all(
+                color: cs.onSurface.withValues(alpha: 0.08), width: 0.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
         child: Row(
           children: [
             Container(
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: _accent.withOpacity(0.12),
+                color: _accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(CupertinoIcons.play_rectangle_fill,
@@ -491,7 +516,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 children: [
                   Text('Live Channels',
                       style: GoogleFonts.dmSerifDisplay(
-                          fontSize: 18, color: cs.onSurface)),
+                          fontSize: 20, color: cs.onSurface, letterSpacing: -0.3)),
                   const SizedBox(height: 3),
                   Text('Browse validated IPTV streams worldwide',
                       style: _font(
@@ -522,10 +547,10 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
         height: 48,
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: cs.onSurface.withOpacity(0.05),
+          color: cs.onSurface.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: cs.onSurface.withOpacity(0.07), width: 0.5),
+              color: cs.onSurface.withValues(alpha: 0.07), width: 0.5),
         ),
         child: Row(
           children: modes
@@ -603,7 +628,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: _categories.length.clamp(0, 15),
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (_, i) {
               final cat = _categories[i];
               final active = _subFilterCategory?.id == cat.id;
@@ -615,12 +640,12 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                   decoration: BoxDecoration(
                     color: active
                         ? cs.primary
-                        : cs.onSurface.withOpacity(0.06),
+                        : cs.onSurface.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: active
                           ? cs.primary
-                          : cs.onSurface.withOpacity(0.08),
+                          : cs.onSurface.withValues(alpha: 0.08),
                       width: 0.5,
                     ),
                   ),
@@ -651,10 +676,10 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 child: Container(
                   height: 44,
                   decoration: BoxDecoration(
-                    color: cs.onSurface.withOpacity(0.06),
+                    color: cs.onSurface.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                        color: cs.onSurface.withOpacity(0.08), width: 0.5),
+                        color: cs.onSurface.withValues(alpha: 0.08), width: 0.5),
                   ),
                   child: Row(
                     children: [
@@ -673,7 +698,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                             hintText: 'Search channels…',
                             hintStyle: _font(
                                 size: 14,
-                                color: cs.onSurfaceVariant.withOpacity(0.5)),
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding:
@@ -690,7 +715,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                             child: Icon(CupertinoIcons.xmark_circle_fill,
                                 size: 16,
                                 color:
-                                    cs.onSurfaceVariant.withOpacity(0.5)),
+                                    cs.onSurfaceVariant.withValues(alpha: 0.5)),
                           ),
                         )
                       else
@@ -707,10 +732,10 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: cs.onSurface.withOpacity(0.06),
+                  color: cs.onSurface.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: cs.onSurface.withOpacity(0.08), width: 0.5),
+                      color: cs.onSurface.withValues(alpha: 0.08), width: 0.5),
                 ),
                 child: Text(
                   '${_filtered.length}',
@@ -738,7 +763,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(CupertinoIcons.tv,
-                    color: cs.onSurface.withOpacity(0.15), size: 48),
+                    color: cs.onSurface.withValues(alpha: 0.15), size: 48),
                 const SizedBox(height: 14),
                 Text(
                   _channels.isEmpty
@@ -899,13 +924,13 @@ class _AppBarAction extends StatelessWidget {
         margin: const EdgeInsets.only(top: 6, bottom: 6, left: 6),
         decoration: BoxDecoration(
           color: active
-              ? _accent.withOpacity(0.15)
-              : cs.onSurface.withOpacity(0.06),
+              ? _accent.withValues(alpha: 0.15)
+              : cs.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: active
-                ? _accent.withOpacity(0.3)
-                : cs.onSurface.withOpacity(0.08),
+                ? _accent.withValues(alpha: 0.3)
+                : cs.onSurface.withValues(alpha: 0.08),
             width: 0.5,
           ),
         ),
@@ -928,9 +953,9 @@ class _LiveDot extends StatelessWidget {
       padding: EdgeInsets.symmetric(
           horizontal: large ? 10 : 7, vertical: large ? 5 : 3),
       decoration: BoxDecoration(
-        color: _live.withOpacity(0.12),
+        color: _live.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _live.withOpacity(0.35), width: 0.5),
+        border: Border.all(color: _live.withValues(alpha: 0.35), width: 0.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -992,7 +1017,7 @@ class _ModeTab extends StatelessWidget {
               fontWeight: active ? FontWeight.w700 : FontWeight.w500,
               color: active
                   ? Colors.white
-                  : cs.onSurface.withOpacity(0.45),
+                  : cs.onSurface.withValues(alpha: 0.45),
             ),
           ),
         ),
@@ -1047,10 +1072,10 @@ class _PickerCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: cs.onSurface.withOpacity(0.05),
+          color: cs.onSurface.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(_kRadius),
           border: Border.all(
-              color: cs.onSurface.withOpacity(0.07), width: 0.5),
+              color: cs.onSurface.withValues(alpha: 0.07), width: 0.5),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1096,10 +1121,10 @@ class _ChannelTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: cs.onSurface.withOpacity(0.05),
+          color: cs.surfaceContainerHigh.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(_kRadius),
           border: Border.all(
-              color: cs.onSurface.withOpacity(0.07), width: 0.5),
+              color: cs.onSurface.withValues(alpha: 0.08), width: 0.5),
         ),
         child: Row(
           children: [
@@ -1114,16 +1139,16 @@ class _ChannelTile extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: channel.logoUrl!,
                         fit: BoxFit.contain,
-                        placeholder: (_, __) =>
+                        placeholder: (_, _) =>
                             Container(color: Colors.white10),
-                        errorWidget: (_, __, ___) => Icon(
+                        errorWidget: (_, _, _) => Icon(
                           CupertinoIcons.tv_fill,
-                          color: cs.onSurfaceVariant.withOpacity(0.3),
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.3),
                           size: 20,
                         ),
                       )
                     : Icon(CupertinoIcons.tv_fill,
-                        color: cs.onSurfaceVariant.withOpacity(0.3),
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.3),
                         size: 20),
               ),
             ),
@@ -1189,10 +1214,10 @@ class _ChannelGridCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: cs.onSurface.withOpacity(0.05),
+          color: cs.surfaceContainerHigh.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(_kRadius),
           border: Border.all(
-              color: cs.onSurface.withOpacity(0.07), width: 0.5),
+              color: cs.onSurface.withValues(alpha: 0.08), width: 0.5),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -1208,14 +1233,14 @@ class _ChannelGridCard extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: channel.logoUrl!,
                         fit: BoxFit.contain,
-                        errorWidget: (_, __, ___) => Icon(
+                        errorWidget: (_, _, _) => Icon(
                           CupertinoIcons.tv_fill,
-                          color: cs.onSurfaceVariant.withOpacity(0.25),
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.25),
                           size: 24,
                         ),
                       )
                     : Icon(CupertinoIcons.tv_fill,
-                        color: cs.onSurfaceVariant.withOpacity(0.25),
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.25),
                         size: 24),
               ),
             ),
@@ -1229,10 +1254,10 @@ class _ChannelGridCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: cs.surface.withOpacity(0.9),
+                  color: cs.surface.withValues(alpha: 0.9),
                   border: Border(
                     top: BorderSide(
-                        color: cs.onSurface.withOpacity(0.06), width: 0.5),
+                        color: cs.onSurface.withValues(alpha: 0.06), width: 0.5),
                   ),
                 ),
                 child: Row(

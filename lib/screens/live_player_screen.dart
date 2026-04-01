@@ -3,11 +3,9 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'dart:convert';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit/media_kit.dart';
@@ -16,6 +14,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../widgets/m3_loading.dart';
 import '../models/channel.dart';
 import '../utils/language_utils.dart';
+import '../widgets/native_ad_widget.dart';
+import '../widgets/banner_ad_widget.dart';
 
 class LivePlayerScreen extends StatefulWidget {
   final Channel channel;
@@ -68,11 +68,12 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
   }
 
   Future<void> _initPlayer() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = true;
         _error = false;
       });
+    }
 
     try {
       if (_currentChannel.streams.isEmpty) throw Exception('No streams found');
@@ -166,8 +167,9 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
   Future<void> _switchChannel(int index) async {
     if (widget.playlist == null ||
         index < 0 ||
-        index >= widget.playlist!.length)
+        index >= widget.playlist!.length) {
       return;
+    }
 
     setState(() {
       _currentIdx = index;
@@ -179,12 +181,6 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     });
 
     await _initPlayer();
-  }
-
-  Future<void> _changeAudioTrack(dynamic track) async {
-    print(
-      'ℹ️ Audio track selection via video_player API is limited. Track: $track',
-    );
   }
 
   @override
@@ -274,7 +270,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                 ),
                 VerticalDivider(
                   width: 1,
-                  color: cs.outlineVariant.withOpacity(0.2),
+                  color: cs.outlineVariant.withValues(alpha: 0.2),
                 ),
                 Expanded(
                   flex: 3,
@@ -326,9 +322,13 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const NativeAdWidget(size: NativeAdSize.small),
                       _buildChannelHeader(cs),
                       const Divider(indent: 24, endIndent: 24, height: 1),
-                      if (widget.playlist != null) _buildPlaylist(cs),
+                      if (widget.playlist != null) ...[
+                        _buildPlaylist(cs),
+                        BannerAdWidget(),
+                      ],
                       const SizedBox(height: 100),
                     ],
                   ),
@@ -352,10 +352,15 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _glassIconButton(
             icon: CupertinoIcons.chevron_back,
             onPressed: () => Navigator.pop(context),
+          ),
+          _glassIconButton(
+            icon: CupertinoIcons.slider_horizontal_3,
+            onPressed: _showSettingsSheet,
           ),
         ],
       ),
@@ -372,7 +377,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            color: Colors.black.withOpacity(0.85),
+            color: Colors.black.withValues(alpha: 0.85),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -435,7 +440,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            color: Colors.black.withOpacity(0.85),
+            color: Colors.black.withValues(alpha: 0.85),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -458,7 +463,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: tracks.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final track = tracks[index];
                     final isActive = track == selectedTrack;
@@ -512,7 +517,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            color: Colors.black.withOpacity(0.85),
+            color: Colors.black.withValues(alpha: 0.85),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -535,7 +540,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: tracks.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final track = tracks[index];
                     final isActive = track == selectedTrack;
@@ -601,7 +606,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       width: 40,
       height: 5,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(3),
       ),
     );
@@ -618,7 +623,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -627,7 +632,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.15),
+                color: cs.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: cs.primary, size: 18),
@@ -645,7 +650,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
             ),
             Icon(
               CupertinoIcons.chevron_right,
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.white.withValues(alpha: 0.3),
               size: 16,
             ),
           ],
@@ -667,18 +672,18 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isActive
-              ? cs.primary.withOpacity(0.12)
-              : Colors.white.withOpacity(0.06),
+              ? cs.primary.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
           border: isActive
-              ? Border.all(color: cs.primary.withOpacity(0.3), width: 1)
+              ? Border.all(color: cs.primary.withValues(alpha: 0.3), width: 1)
               : null,
         ),
         child: Row(
           children: [
             Icon(
               isActive ? CupertinoIcons.checkmark_circle_fill : icon,
-              color: isActive ? cs.primary : Colors.white.withOpacity(0.5),
+              color: isActive ? cs.primary : Colors.white.withValues(alpha: 0.5),
               size: 20,
             ),
             const SizedBox(width: 14),
@@ -688,7 +693,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? cs.primary : Colors.white.withOpacity(0.9),
+                  color: isActive ? cs.primary : Colors.white.withValues(alpha: 0.9),
                 ),
               ),
             ),
@@ -696,7 +701,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.15),
+                  color: cs.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -717,7 +722,6 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
   Widget _glassIconButton({
     required IconData icon,
     required VoidCallback onPressed,
-    double size = 48,
     double iconSize = 24,
   }) {
     return IconButton(
@@ -741,7 +745,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: cs.shadow.withOpacity(0.1),
+                  color: cs.shadow.withValues(alpha: 0.1),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -854,7 +858,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
           physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 24),
           itemCount: widget.playlist!.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
             final ch = widget.playlist![i];
             final active = i == _currentIdx;
@@ -867,11 +871,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
                 decoration: BoxDecoration(
                   color: active
                       ? cs.secondaryContainer
-                      : cs.surfaceContainerHighest.withOpacity(0.3),
+                      : cs.surfaceContainerHighest.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: active
-                        ? cs.primary.withOpacity(0.2)
+                        ? cs.primary.withValues(alpha: 0.2)
                         : Colors.transparent,
                     width: 1.5,
                   ),

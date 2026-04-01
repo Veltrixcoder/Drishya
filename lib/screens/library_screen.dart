@@ -6,8 +6,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/watch_history.dart';
 import '../services/bookmark_service.dart';
-import '../services/tmdb_service.dart';
+import '../services/api_service.dart';
+
 import 'detail_screen.dart';
+import '../widgets/native_ad_widget.dart';
+import '../widgets/banner_ad_widget.dart';
 
 class LibraryScreen extends StatefulWidget {
   final VoidCallback onSearch;
@@ -18,7 +21,7 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  final TmdbService _tmdb = TmdbService();
+  final _api = ApiService.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -28,9 +31,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       backgroundColor: cs.surface,
       body: ValueListenableBuilder<int>(
         valueListenable: BookmarkService.listChanged,
-        builder: (context, _, __) => ValueListenableBuilder<int>(
+        builder: (context, _, _) => ValueListenableBuilder<int>(
           valueListenable: WatchHistory.listChanged,
-          builder: (context, _, __) {
+          builder: (context, _, _) {
             // Re-categorize Bookmarks dynamically
             final bookmarkedMovies = BookmarkService.bookmarks
                 .where((m) => m.mediaType == 'movie')
@@ -50,57 +53,79 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 historyMovies.isEmpty &&
                 historyTv.isEmpty;
 
-            return CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                _buildAppBar(cs),
-                if (isEmpty)
-                  _buildEmptyState(cs)
-                else ...[
-                  // My List Categories
-                  if (bookmarkedMovies.isNotEmpty)
-                    _buildSectionHeader(
-                      'My List - Movies',
-                      bookmarkedMovies.length,
-                      cs,
-                    ),
-                  if (bookmarkedMovies.isNotEmpty)
-                    _buildHorizontalList(bookmarkedMovies, cs),
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    _buildAppBar(cs),
 
-                  if (bookmarkedTv.isNotEmpty)
-                    _buildSectionHeader(
-                      'My List - TV Series',
-                      bookmarkedTv.length,
-                      cs,
-                    ),
-                  if (bookmarkedTv.isNotEmpty)
-                    _buildHorizontalList(bookmarkedTv, cs),
+                    if (isEmpty)
+                      _buildEmptyState(cs)
+                    else ...[
+                      // My List Categories
+                      if (bookmarkedMovies.isNotEmpty)
+                        _buildSectionHeader(
+                          'My List - Movies',
+                          bookmarkedMovies.length,
+                          cs,
+                        ),
+                      if (bookmarkedMovies.isNotEmpty)
+                        _buildHorizontalList(bookmarkedMovies, cs),
 
-                  // Spacing if history exists
-                  if (historyMovies.isNotEmpty || historyTv.isNotEmpty)
-                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                      if (bookmarkedTv.isNotEmpty)
+                        _buildSectionHeader(
+                          'My List - TV Series',
+                          bookmarkedTv.length,
+                          cs,
+                        ),
+                      if (bookmarkedTv.isNotEmpty)
+                        _buildHorizontalList(bookmarkedTv, cs),
 
-                  // History Categories
-                  if (historyMovies.isNotEmpty)
-                    _buildSectionHeader(
-                      'Continue Watching - Movies',
-                      historyMovies.length,
-                      cs,
-                    ),
-                  if (historyMovies.isNotEmpty)
-                    _buildHorizontalList(historyMovies, cs),
+                      // Spacing if history exists
+                      if (historyMovies.isNotEmpty || historyTv.isNotEmpty)
+                        const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-                  if (historyTv.isNotEmpty)
-                    _buildSectionHeader(
-                      'Continue Watching - TV Series',
-                      historyTv.length,
-                      cs,
-                    ),
-                  if (historyTv.isNotEmpty) _buildHorizontalList(historyTv, cs),
+                      // History Categories
+                      if (historyMovies.isNotEmpty)
+                        _buildSectionHeader(
+                          'Continue Watching - Movies',
+                          historyMovies.length,
+                          cs,
+                        ),
+                      if (historyMovies.isNotEmpty)
+                        _buildHorizontalList(historyMovies, cs),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 120)),
-                ],
-              ],
+                      if (historyTv.isNotEmpty)
+                        _buildSectionHeader(
+                          'Continue Watching - TV Series',
+                          historyTv.length,
+                          cs,
+                        ),
+                      if (historyTv.isNotEmpty) _buildHorizontalList(historyTv, cs),
+
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+                          child: Column(
+                            children: [
+                              const Center(child: NativeAdWidget()),
+                              const SizedBox(height: 32),
+                              const NativeAdWidget(size: NativeAdSize.small),
+                              const SizedBox(height: 32),
+                              BannerAdWidget(),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                    ],
+                  ],
+                ),
+              ),
             );
           },
         ),
@@ -151,6 +176,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+
+
   Widget _buildSectionHeader(String title, int count, ColorScheme cs) {
     return SliverToBoxAdapter(
       child: Padding(
@@ -173,7 +200,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: cs.onSurfaceVariant.withOpacity(0.5),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
               ),
             ),
@@ -204,8 +231,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   item: item,
                   onTap: () async {
                     final detail = item.mediaType == 'movie'
-                        ? await _tmdb.getMovieDetail(item.id)
-                        : await _tmdb.getTvDetail(item.id);
+                        ? await _api.getMovieDetail(item.id)
+                        : await _api.getTvDetail(item.id);
                     if (detail != null && context.mounted) {
                       Navigator.push(
                         context,
@@ -229,15 +256,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
               itemBuilder: (context, index) {
                 final item = items[index];
                 return _LibraryCard(
                   item: item,
                   onTap: () async {
                     final detail = item.mediaType == 'movie'
-                        ? await _tmdb.getMovieDetail(item.id)
-                        : await _tmdb.getTvDetail(item.id);
+                        ? await _api.getMovieDetail(item.id)
+                        : await _api.getTvDetail(item.id);
                     if (detail != null && context.mounted) {
                       Navigator.push(
                         context,
@@ -266,7 +293,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Icon(
               CupertinoIcons.square_stack_3d_down_right,
               size: 64,
-              color: cs.onSurfaceVariant.withOpacity(0.3),
+              color: cs.onSurfaceVariant.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -312,7 +339,7 @@ class _LibraryCard extends StatelessWidget {
                   color: cs.surfaceContainerHigh,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
+                      color: Colors.black.withValues(alpha: 0.15),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -327,7 +354,7 @@ class _LibraryCard extends StatelessWidget {
                         ? CachedNetworkImage(
                             imageUrl: item.fullPosterUrl,
                             fit: BoxFit.cover,
-                            placeholder: (_, __) =>
+                            placeholder: (_, _) =>
                                 Container(color: cs.surfaceContainerHigh),
                           )
                         : Container(
@@ -347,8 +374,8 @@ class _LibraryCard extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              Colors.black.withOpacity(0.1),
-                              Colors.black.withOpacity(0.8),
+                              Colors.black.withValues(alpha: 0.1),
+                              Colors.black.withValues(alpha: 0.8),
                             ],
                             stops: const [0.6, 0.8, 1.0],
                           ),
@@ -406,7 +433,7 @@ class _LibraryCard extends StatelessWidget {
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: onTap,
-                          splashColor: cs.primary.withOpacity(0.2),
+                          splashColor: cs.primary.withValues(alpha: 0.2),
                         ),
                       ),
                     ),
@@ -422,3 +449,6 @@ class _LibraryCard extends StatelessWidget {
     );
   }
 }
+
+
+

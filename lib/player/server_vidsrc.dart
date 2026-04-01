@@ -7,7 +7,7 @@ class VidsrcServerResolver {
 
   String buildEmbedUrl({required int tmdbId, required String mediaType}) {
     final typePath = (mediaType == 'tv') ? 'tv' : 'movie';
-    return 'https://vidsrc.cc/v2/embed/' + typePath + '/' + tmdbId.toString() + '?autoPlay=true';
+    return 'https://vidsrc.cc/v2/embed/$typePath/$tmdbId?autoPlay=true';
   }
 
   Future<ResolvedStream> resolveViaHtml({required String embedUrl}) async {
@@ -63,15 +63,15 @@ class VidsrcServerResolver {
     }
 
     // 2) Servers list (attempt with vrf, then without)
-    Future<http.Response> _fetchServers({bool includeVrf = true}) {
+    Future<http.Response> fetchServers({bool includeVrf = true}) {
       final qp = <String, String>{
         'id': movieId!,
         'type': movieType!,
         'v': v!,
-        if (includeVrf && vrf != null && vrf!.isNotEmpty) 'vrf': vrf!,
-        if (imdbId != null && imdbId!.isNotEmpty && imdbId != 'null') 'imdbId': imdbId!,
+        if (includeVrf && vrf != null && vrf.isNotEmpty) 'vrf': vrf,
+        if (imdbId != null && imdbId.isNotEmpty && imdbId != 'null') 'imdbId': imdbId,
       };
-      final serversUri = Uri.parse('https://vidsrc.cc/api/' + Uri.encodeComponent(movieId!) + '/servers').replace(queryParameters: qp);
+      final serversUri = Uri.parse('https://vidsrc.cc/api/${Uri.encodeComponent(movieId)}/servers').replace(queryParameters: qp);
       return http.get(serversUri, headers: {
         'User-Agent': _ua,
         'Accept': 'application/json, text/plain, */*',
@@ -84,9 +84,9 @@ class VidsrcServerResolver {
       });
     }
 
-    http.Response serversResp = await _fetchServers(includeVrf: true);
+    http.Response serversResp = await fetchServers(includeVrf: true);
     if (serversResp.statusCode != 200) {
-      serversResp = await _fetchServers(includeVrf: false);
+      serversResp = await fetchServers(includeVrf: false);
     }
     if (serversResp.statusCode != 200) {
       throw Exception('Vidsrc servers API failed');
@@ -106,7 +106,7 @@ class VidsrcServerResolver {
     if (vidplayHash.isEmpty) throw Exception('Missing server hash');
 
     // 3) Source by hash
-    final sourceUri = Uri.parse('https://vidsrc.cc/api/source/' + Uri.encodeComponent(vidplayHash));
+    final sourceUri = Uri.parse('https://vidsrc.cc/api/source/${Uri.encodeComponent(vidplayHash)}');
     final sourceResp = await http.get(sourceUri, headers: {
       'User-Agent': _ua,
       'Accept': 'application/json, text/plain, */*',
@@ -134,10 +134,10 @@ class VidsrcServerResolver {
   }
 
   String? _extractVar(String html, String name) {
-    final re1 = RegExp('var\\s+' + RegExp.escape(name) + '\\s*=\\s*"([^"]*)"');
-    final re2 = RegExp("var\\s+" + RegExp.escape(name) + "\\s*=\\s*'([^']*)'");
-    final re3 = RegExp(RegExp.escape(name) + '\\s*=\\s*"([^"]*)"');
-    final re4 = RegExp(RegExp.escape(name) + "\\s*=\\s*'([^']*)'");
+    final re1 = RegExp('var\\s+${RegExp.escape(name)}\\s*=\\s*"([^"]*)"');
+    final re2 = RegExp("var\\s+${RegExp.escape(name)}\\s*=\\s*'([^']*)'");
+    final re3 = RegExp('${RegExp.escape(name)}\\s*=\\s*"([^"]*)"');
+    final re4 = RegExp("${RegExp.escape(name)}\\s*=\\s*'([^']*)'");
     for (final re in [re1, re2, re3, re4]) {
       final m = re.firstMatch(html);
       if (m != null) return m.group(1);
@@ -147,8 +147,8 @@ class VidsrcServerResolver {
 
   String? _extractJsonLike(String html, String name) {
     // Covers patterns like: "name":"value" or 'name':'value'
-    final re1 = RegExp('"' + RegExp.escape(name) + '"\s*:\s*"([^"]*)"');
-    final re2 = RegExp("'" + RegExp.escape(name) + "'\s*:\s*'([^']*)'");
+    final re1 = RegExp('"${RegExp.escape(name)}"s*:s*"([^"]*)"');
+    final re2 = RegExp("'${RegExp.escape(name)}'s*:s*'([^']*)'");
     final m1 = re1.firstMatch(html);
     if (m1 != null) return m1.group(1);
     final m2 = re2.firstMatch(html);

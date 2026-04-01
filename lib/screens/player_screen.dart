@@ -9,16 +9,17 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../widgets/m3_loading.dart';
 import '../utils/language_utils.dart';
 import '../models/media_item.dart';
-import '../services/streaming_service.dart';
-import '../services/tmdb_service.dart';
+import '../services/api_service.dart';
+import '../models/api_models.dart';
 import '../services/watch_history.dart';
+import '../widgets/native_ad_widget.dart';
+import '../widgets/banner_ad_widget.dart';
 
 class PlayerScreen extends StatefulWidget {
   final MediaDetail? item;
@@ -36,13 +37,14 @@ class PlayerScreen extends StatefulWidget {
     this.episode,
   });
 
+
+
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  final _streamService = StreamingService();
-  final _tmdb = TmdbService();
+  final _api = ApiService.instance;
 
   late final player = Player();
   late final controller = VideoController(player);
@@ -142,7 +144,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadEpisodeDetail() async {
-    final ep = await _tmdb.getTvEpisodeDetail(
+    final ep = await _api.getTvEpisodeDetail(
       widget.item!.id,
       widget.season!,
       widget.episode!,
@@ -171,13 +173,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       '\n🎬 Loading ${isTv ? "TV" : "Movie"} | tmdbId=${widget.item!.id}',
     );
 
-    final stream = isTv
-        ? _streamService.getTvSources(
-            widget.item!.id,
-            widget.season ?? 1,
-            widget.episode ?? 1,
-          )
-        : _streamService.getMovieSources(widget.item!.id);
+    final stream = _api.getSources(
+      widget.item!.mediaType,
+      widget.item!.id,
+      season: widget.season,
+      episode: widget.episode,
+    );
 
     stream.listen(
       (newSources) {
@@ -249,6 +250,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _getCDN(String url) {
     try {
       final uri = Uri.parse(url);
+      // If the URL is a proxying service, try to block the target host instead of the proxy itself.
+      final target = uri.queryParameters['url'] ?? uri.queryParameters['link'];
+      if (target != null && target.startsWith('http')) {
+        final targetUri = Uri.parse(target);
+        return '${targetUri.scheme}://${targetUri.host}';
+      }
       return '${uri.scheme}://${uri.host}';
     } catch (_) {
       return url;
@@ -372,7 +379,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     debugPrint('\n▶️  Initializing media_kit Player');
-    debugPrint('   URL: $url');
+    debugPrint('   URL/Path: $url');
+
+
 
     // FIX 7: Pre-validate URL with a HEAD request before handing to media_kit.
     // This catches immediate 404s in ~8s instead of waiting for libmpv's
@@ -582,7 +591,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                       VerticalDivider(
                         width: 1,
-                        color: cs.outlineVariant.withOpacity(0.2),
+                        color: cs.outlineVariant.withValues(alpha: 0.2),
                       ),
                       Expanded(flex: 3, child: _buildSidebar(cs)),
                     ],
@@ -614,7 +623,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            const NativeAdWidget(size: NativeAdSize.small), // First Ad (Small)
                             if (widget.item != null) _buildMovieInfo(),
+                            const NativeAdWidget(size: NativeAdSize.medium), // Second Ad (Medium)
+                            BannerAdWidget(), // Third Ad (Banner)
                             const SizedBox(height: 100),
                           ],
                         ),
@@ -714,7 +726,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: cs.primary.withOpacity(0.1),
+          color: cs.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: cs.primary, size: 20),
@@ -768,7 +780,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         child: Center(
           child: Icon(
             CupertinoIcons.play_rectangle_fill,
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             size: 64,
           ),
         ),
@@ -793,8 +805,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
             color: isDark
-                ? Colors.black.withOpacity(0.8)
-                : cs.surface.withOpacity(0.8),
+                ? Colors.black.withValues(alpha: 0.8)
+                : cs.surface.withValues(alpha: 0.8),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -880,8 +892,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
             color: isDark
-                ? Colors.black.withOpacity(0.8)
-                : cs.surface.withOpacity(0.8),
+                ? Colors.black.withValues(alpha: 0.8)
+                : cs.surface.withValues(alpha: 0.8),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -905,7 +917,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: ListView.separated(
                         shrinkWrap: true,
                         itemCount: tracks.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
                         itemBuilder: (context, index) {
                           final track = tracks[index];
                           final isActive = track == selectedTrack;
@@ -959,8 +971,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
             color: isDark
-                ? Colors.black.withOpacity(0.8)
-                : cs.surface.withOpacity(0.8),
+                ? Colors.black.withValues(alpha: 0.8)
+                : cs.surface.withValues(alpha: 0.8),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -984,7 +996,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: ListView.separated(
                         shrinkWrap: true,
                         itemCount: tracks.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
                         itemBuilder: (context, index) {
                           final track = tracks[index];
                           final isActive = track == selectedTrack;
@@ -1066,8 +1078,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
             color: isDark
-                ? Colors.black.withOpacity(0.8)
-                : cs.surface.withOpacity(0.8),
+                ? Colors.black.withValues(alpha: 0.8)
+                : cs.surface.withValues(alpha: 0.8),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               child: Column(
@@ -1082,7 +1094,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: cs.primary.withOpacity(0.15),
+                          color: cs.primary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
@@ -1118,7 +1130,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       shrinkWrap: true,
                       physics: const BouncingScrollPhysics(),
                       itemCount: availableSources.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (_, i) {
                         final s = availableSources[i];
                         final active = s == _selectedSource;
@@ -1139,13 +1151,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           duration: const Duration(milliseconds: 200),
                           decoration: BoxDecoration(
                             color: active
-                                ? cs.primary.withOpacity(0.15)
+                                ? cs.primary.withValues(alpha: 0.15)
                                 : cs.surfaceContainerHigh,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: active
-                                  ? cs.primary.withOpacity(0.5)
-                                  : cs.outlineVariant.withOpacity(0.4),
+                                  ? cs.primary.withValues(alpha: 0.5)
+                                  : cs.outlineVariant.withValues(alpha: 0.4),
                               width: active ? 1.5 : 0.5,
                             ),
                           ),
@@ -1162,7 +1174,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               height: 42,
                               decoration: BoxDecoration(
                                 color: active
-                                    ? cs.primary.withOpacity(0.2)
+                                    ? cs.primary.withValues(alpha: 0.2)
                                     : cs.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -1190,7 +1202,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   : '${s.source} · Server ${s.serverId}',
                               style: GoogleFonts.dmSans(
                                 color: active
-                                    ? cs.primary.withOpacity(0.7)
+                                    ? cs.primary.withValues(alpha: 0.7)
                                     : cs.onSurfaceVariant,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -1203,7 +1215,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: cs.primary.withOpacity(0.2),
+                                      color: cs.primary.withValues(alpha: 0.2),
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Row(
@@ -1254,7 +1266,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       width: 40,
       height: 5,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(3),
       ),
     );
@@ -1271,10 +1283,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withOpacity(0.4),
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: cs.outlineVariant.withOpacity(0.1),
+            color: cs.outlineVariant.withValues(alpha: 0.1),
             width: 0.5,
           ),
         ),
@@ -1284,7 +1296,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.15),
+                color: cs.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: cs.primary, size: 18),
@@ -1302,7 +1314,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             Icon(
               CupertinoIcons.chevron_right,
-              color: cs.onSurfaceVariant.withOpacity(0.5),
+              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
               size: 16,
             ),
           ],
@@ -1324,13 +1336,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isActive
-              ? cs.primary.withOpacity(0.12)
-              : cs.surfaceContainerHighest.withOpacity(0.4),
+              ? cs.primary.withValues(alpha: 0.12)
+              : cs.surfaceContainerHighest.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isActive
-                ? cs.primary.withOpacity(0.3)
-                : cs.outlineVariant.withOpacity(0.1),
+                ? cs.primary.withValues(alpha: 0.3)
+                : cs.outlineVariant.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -1340,7 +1352,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               isActive ? CupertinoIcons.checkmark_circle_fill : icon,
               color: isActive
                   ? cs.primary
-                  : cs.onSurfaceVariant.withOpacity(0.6),
+                  : cs.onSurfaceVariant.withValues(alpha: 0.6),
               size: 20,
             ),
             const SizedBox(width: 14),
@@ -1358,7 +1370,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.15),
+                  color: cs.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -1441,10 +1453,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             child: Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: (isDark ? Colors.black : Colors.white).withOpacity(0.65),
+                color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.65),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: cs.onSurface.withOpacity(0.1),
+                  color: cs.onSurface.withValues(alpha: 0.1),
                   width: 0.5,
                 ),
               ),
@@ -1461,7 +1473,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       },
                       icon: Icon(
                         CupertinoIcons.clear_circled_solid,
-                        color: cs.onSurface.withOpacity(0.4),
+                        color: cs.onSurface.withValues(alpha: 0.4),
                         size: 30,
                       ),
                     ),
@@ -1472,7 +1484,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: cs.error.withOpacity(0.12),
+                          color: cs.error.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -1539,77 +1551,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  Widget _buildErrorView() {
-    // Keep this only as a fallback or remove if fully switched to dialog
-    final cs = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  CupertinoIcons.exclamationmark_circle,
-                  color: cs.error,
-                  size: 48,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Playback Failure',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.dmSerifDisplay(
-                    color: cs.onSurface,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Flexible(
-                  child: Text(
-                    _errorMsg,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 14,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: _loadMovieStreams,
-                  icon: const Icon(CupertinoIcons.refresh),
-                  label: const Text(
-                    'Retry Connection',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: cs.primary,
-                    foregroundColor: cs.onPrimary,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ).animate().fadeIn().scale(
-              begin: const Offset(0.9, 0.9),
-              curve: Curves.easeOutBack,
-            ),
-      ),
-    );
-  }
 
   // ── Info sections ───────────────────────────────────────────────────────────
 
@@ -1703,7 +1644,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               itemCount: item.cast.length.clamp(0, 10),
-              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              separatorBuilder: (_, _) => const SizedBox(width: 20),
               itemBuilder: (_, i) {
                 final p = item.cast[i];
                 return Column(
@@ -1838,7 +1779,7 @@ class _ShortcutInfo extends StatelessWidget {
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: Text(
               keyLabel,

@@ -11,33 +11,65 @@ import 'screens/livetv_screen.dart';
 import 'screens/search_screen.dart';
 import 'services/watch_history.dart';
 import 'services/bookmark_service.dart';
-import 'services/update_service.dart';
+import 'services/api_service.dart';
+
 import 'screens/library_screen.dart';
+import 'screens/games_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'services/ad_service.dart';
+import 'services/deeplink_service.dart';
+import 'screens/onboarding_screen.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MobileAds.instance.initialize();
+  AdService.loadRewardedAd();
   MediaKit.ensureInitialized();
   await WatchHistory.load();
   await BookmarkService.init();
-  runApp(const StreamFlixApp());
+  await ApiService.instance.init();
+  runApp(const DrishyaApp());
 }
 
-class StreamFlixApp extends StatelessWidget {
-  const StreamFlixApp({super.key});
+class DrishyaApp extends StatefulWidget {
+  const DrishyaApp({super.key});
+
+  @override
+  State<DrishyaApp> createState() => _DrishyaAppState();
+}
+
+class _DrishyaAppState extends State<DrishyaApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize DeepLink handling globally
+    DeepLinkService.instance.init();
+  }
+
+  @override
+  void dispose() {
+    DeepLinkService.instance.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
-      builder: (_, __) {
+      builder: (_, _) {
         return MaterialApp(
-          title: 'StreamFlix',
+          navigatorKey: navigatorKey,
+          title: 'Drishya',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme(),
           darkTheme: AppTheme.darkTheme(),
           themeMode: ThemeMode.system,
-          home: const MainNavigation(),
+          home: ApiService.instance.isConfigured 
+            ? const MainNavigation() 
+            : const OnboardingScreen(),
         );
       },
     );
@@ -62,6 +94,11 @@ const List<_NavItem> _navItems = [
     label: 'Live',
   ),
   _NavItem(
+    icon: CupertinoIcons.gamecontroller,
+    selectedIcon: CupertinoIcons.gamecontroller_fill,
+    label: 'Games',
+  ),
+  _NavItem(
     icon: CupertinoIcons.square_grid_2x2,
     selectedIcon: CupertinoIcons.square_grid_2x2_fill,
     label: 'Library',
@@ -83,14 +120,20 @@ class _MainNavigationState extends State<MainNavigation> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
+    
+    // Update DeepLink listener with tab change callback
+    DeepLinkService.instance.init(onTabChange: (idx) {
+      if (mounted) setState(() => _idx = idx);
+    });
+
     _screens = [
       HomeScreen(
         onSearch: () {
           Navigator.push(
             context,
             PageRouteBuilder(
-              pageBuilder: (_, __, ___) => SearchScreen(),
-              transitionsBuilder: (_, anim, __, child) =>
+              pageBuilder: (_, _, _) => SearchScreen(),
+              transitionsBuilder: (_, anim, _, child) =>
                   FadeTransition(opacity: anim, child: child),
               transitionDuration: const Duration(milliseconds: 220),
             ),
@@ -99,13 +142,14 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
       const TvShowsScreen(),
       const LiveTvScreen(),
+      const GamesScreen(),
       LibraryScreen(
         onSearch: () {
           Navigator.push(
             context,
             PageRouteBuilder(
-              pageBuilder: (_, __, ___) => SearchScreen(),
-              transitionsBuilder: (_, anim, __, child) =>
+              pageBuilder: (_, _, _) => SearchScreen(),
+              transitionsBuilder: (_, anim, _, child) =>
                   FadeTransition(opacity: anim, child: child),
               transitionDuration: const Duration(milliseconds: 220),
             ),
@@ -115,8 +159,13 @@ class _MainNavigationState extends State<MainNavigation> {
     ];
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _checkUpdate() async {
-    final update = await UpdateService.checkForUpdate();
+    final update = await ApiService.instance.checkForUpdate();
     if (update != null && mounted) {
       _showUpdateDialog(update);
     }
@@ -155,7 +204,7 @@ class _MainNavigationState extends State<MainNavigation> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'A new version (${update['version']}) of StreamFlix is available. Would you like to update now?',
+              'A new version (${update['version']}) of Drishya is available. Would you like to update now?',
               style: GoogleFonts.dmSans(
                 color: cs.onSurfaceVariant,
                 fontSize: 14,
@@ -248,10 +297,10 @@ class _MainNavigationState extends State<MainNavigation> {
                   selectedIndex: _idx,
                   onDestinationSelected: (i) => setState(() => _idx = i),
                   backgroundColor: cs.surface,
-                  indicatorColor: cs.primary.withOpacity(0.15),
+                  indicatorColor: cs.primary.withValues(alpha: 0.15),
                   selectedIconTheme: IconThemeData(color: cs.primary),
                   unselectedIconTheme: IconThemeData(
-                    color: cs.onSurface.withOpacity(0.45),
+                    color: cs.onSurface.withValues(alpha: 0.45),
                   ),
                   selectedLabelTextStyle: GoogleFonts.dmSans(
                     color: cs.primary,
@@ -259,7 +308,7 @@ class _MainNavigationState extends State<MainNavigation> {
                     fontSize: 12,
                   ),
                   unselectedLabelTextStyle: GoogleFonts.dmSans(
-                    color: cs.onSurface.withOpacity(0.45),
+                    color: cs.onSurface.withValues(alpha: 0.45),
                     fontSize: 12,
                   ),
                   labelType: NavigationRailLabelType.all,
@@ -274,7 +323,7 @@ class _MainNavigationState extends State<MainNavigation> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'StreamFlix',
+                          'Drishya',
                           style: GoogleFonts.dmSerifDisplay(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -302,6 +351,11 @@ class _MainNavigationState extends State<MainNavigation> {
                       label: Text('Live'),
                     ),
                     NavigationRailDestination(
+                      icon: Icon(CupertinoIcons.gamecontroller),
+                      selectedIcon: Icon(CupertinoIcons.gamecontroller_fill),
+                      label: Text('Games'),
+                    ),
+                    NavigationRailDestination(
                       icon: Icon(CupertinoIcons.square_grid_2x2),
                       selectedIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
                       label: Text('Library'),
@@ -311,7 +365,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 VerticalDivider(
                   width: 1,
                   thickness: 1,
-                  color: cs.outlineVariant.withOpacity(0.2),
+                  color: cs.outlineVariant.withValues(alpha: 0.2),
                 ),
                 Expanded(
                   child: IndexedStack(index: _idx, children: _screens),
@@ -382,32 +436,32 @@ class _LiquidGlassNavBar extends StatelessWidget {
                       end: Alignment.bottomRight,
                       colors: isDark
                           ? [
-                              Colors.white.withOpacity(0.05),
-                              Colors.white.withOpacity(0.02),
+                              Colors.white.withValues(alpha: 0.05),
+                              Colors.white.withValues(alpha: 0.02),
                             ]
                           : [
-                              Colors.white.withOpacity(0.4),
-                              Colors.white.withOpacity(0.1),
+                              Colors.white.withValues(alpha: 0.4),
+                              Colors.white.withValues(alpha: 0.1),
                             ],
                     ),
                     borderRadius: BorderRadius.circular(40),
                     border: Border.all(
                       color: isDark
-                          ? Colors.white.withOpacity(0.1)
-                          : Colors.black.withOpacity(0.06),
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.black.withValues(alpha: 0.06),
                       width: 0.5,
                     ),
                     boxShadow: [
                       // Subtle "floating" outer shadow
                       BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.5 : 0.15),
+                        color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
                         blurRadius: 30,
                         spreadRadius: -6,
                         offset: const Offset(0, 10),
                       ),
                       // Subtle inner brand glow to "mix" with background
                       BoxShadow(
-                        color: cs.primary.withOpacity(isDark ? 0.06 : 0.04),
+                        color: cs.primary.withValues(alpha: isDark ? 0.06 : 0.04),
                         blurRadius: 20,
                         spreadRadius: -4,
                       ),
@@ -462,13 +516,13 @@ class _GlassNavItem extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected
-              ? accentColor.withOpacity(isDark ? 0.28 : 0.18)
+              ? accentColor.withValues(alpha: isDark ? 0.28 : 0.18)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(40),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: accentColor.withOpacity(isDark ? 0.15 : 0.1),
+                    color: accentColor.withValues(alpha: isDark ? 0.15 : 0.1),
                     blurRadius: 10,
                     spreadRadius: -2,
                   )
@@ -487,8 +541,8 @@ class _GlassNavItem extends StatelessWidget {
                 color: selected
                     ? accentColor
                     : (isDark
-                        ? Colors.white.withOpacity(0.8)
-                        : Colors.black.withOpacity(0.7)),
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : Colors.black.withValues(alpha: 0.7)),
               ),
             ),
             const SizedBox(height: 2),
@@ -500,8 +554,8 @@ class _GlassNavItem extends StatelessWidget {
                 color: selected
                     ? accentColor
                     : (isDark
-                        ? Colors.white.withOpacity(0.8)
-                        : Colors.black.withOpacity(0.7)),
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : Colors.black.withValues(alpha: 0.7)),
               ),
               child: Text(item.label),
             ),
