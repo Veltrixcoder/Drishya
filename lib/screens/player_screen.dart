@@ -16,6 +16,7 @@ import '../widgets/m3_loading.dart';
 import '../utils/language_utils.dart';
 import '../models/media_item.dart';
 import '../services/api_service.dart';
+import '../services/streaming_service.dart';
 import '../models/api_models.dart';
 import '../services/watch_history.dart';
 import '../widgets/native_ad_widget.dart';
@@ -45,6 +46,7 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   final _api = ApiService.instance;
+  final _streamService = StreamingService.instance;
 
   late final player = Player();
   late final controller = VideoController(player);
@@ -173,7 +175,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       '\n🎬 Loading ${isTv ? "TV" : "Movie"} | tmdbId=${widget.item!.id}',
     );
 
-    final stream = _api.getSources(
+    final stream = _streamService.getSources(
       widget.item!.mediaType,
       widget.item!.id,
       season: widget.season,
